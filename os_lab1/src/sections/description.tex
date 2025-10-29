@@ -1,0 +1,88 @@
+\section{Описание программы}
+
+\subsection{Разделение по файлам}
+
+Программа состоит из двух файлов:
+\begin{itemize}
+    \item \texttt{parent.c} --- родительский процесс, управляющий взаимодействием
+    \item \texttt{child.c} --- дочерний процесс, выполняющий вычисления
+\end{itemize}
+
+\subsection{Основные типы данных}
+
+В программе используются следующие типы данных:
+\begin{itemize}
+    \item \texttt{char filename[256]} --- буфер для имени файла
+    \item \texttt{int pipe\_to\_child[2]}, \texttt{int pipe\_from\_child[2]} --- массивы дескрипторов каналов
+    \item \texttt{pid\_t pid} --- идентификатор процесса
+    \item \texttt{char line[512]} --- буфер для вводимой строки
+    \item \texttt{float numbers[128]} --- массив для хранения чисел
+\end{itemize}
+
+\subsection{Основные функции}
+
+\subsubsection{Родительский процесс (parent.c)}
+
+\begin{itemize}
+    \item \texttt{main()} --- основная функция, реализующая логику родительского процесса:
+    \begin{itemize}
+        \item Создание каналов через \texttt{pipe()}
+        \item Создание дочернего процесса через \texttt{fork()}
+        \item Перенаправление потоков через \texttt{dup2()}
+        \item Запуск дочерней программы через \texttt{execl()}
+        \item Цикл чтения команд и передачи их дочернему процессу
+        \item Ожидание завершения дочернего процесса
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{Дочерний процесс (child.c)}
+
+\begin{itemize}
+    \item \texttt{main(int argc, char *argv[])} --- основная функция дочернего процесса:
+    \begin{itemize}
+        \item Получение имени файла из аргументов
+        \item Открытие файла для записи
+        \item Цикл чтения строк из stdin
+        \item Парсинг строки и извлечение чисел через \texttt{strtof()}
+        \item Проверка деления на ноль
+        \item Выполнение деления и запись результата в файл
+    \end{itemize}
+\end{itemize}
+
+\subsection{Используемые системные вызовы}
+
+\begin{description}
+    \item[\texttt{pipe(int pipefd[2])}] Создает канал и возвращает два файловых дескриптора: \texttt{pipefd[0]} для чтения и \texttt{pipefd[1]} для записи.
+    
+    \item[\texttt{fork()}] Создает копию текущего процесса. Возвращает PID дочернего процесса в родительском процессе и 0 в дочернем процессе.
+    
+    \item[\texttt{execl(const char *path, const char *arg, ...)}] Заменяет образ текущего процесса новой программой. Принимает путь к программе и аргументы командной строки.
+    
+    \item[\texttt{dup2(int oldfd, int newfd)}] Дублирует файловый дескриптор, позволяя перенаправить стандартные потоки (stdin, stdout) на каналы.
+    
+    \item[\texttt{write(int fd, const void *buf, size_t count)}] Записывает данные в файловый дескриптор (в данном случае --- в канал).
+    
+    \item[\texttt{read(int fd, void *buf, size_t count)}] Читает данные из файлового дескриптора (в данном случае --- из канала).
+    
+    \item[\texttt{waitpid(pid\_t pid, int *status, int options)}] Ожидает завершения дочернего процесса с указанным PID.
+    
+    \item[\texttt{fcntl(int fd, int cmd, ...)}] Выполняет различные операции с файловым дескриптором. Используется для установки неблокирующего режима через \texttt{F\_SETFL} и \texttt{O\_NONBLOCK}.
+\end{description}
+
+\subsection{Обработка ошибок}
+
+Программа обрабатывает следующие системные ошибки:
+\begin{itemize}
+    \item Ошибки создания каналов (\texttt{pipe()})
+    \item Ошибки создания процесса (\texttt{fork()})
+    \item Ошибки перенаправления потоков (\texttt{dup2()})
+    \item Ошибки запуска программы (\texttt{execl()})
+    \item Ошибки записи в канал (\texttt{write()})
+    \item Ошибки открытия файла (\texttt{fopen()})
+    \item Деление на ноль (проверяется в дочернем процессе)
+\end{itemize}
+
+Все ошибки обрабатываются через проверку возвращаемых значений системных вызовов и вывод сообщений об ошибках через \texttt{perror()}.
+
+
+
