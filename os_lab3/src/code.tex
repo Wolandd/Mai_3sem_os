@@ -1,0 +1,393 @@
+\section{Исходная программа}
+
+\subsection{common.h}
+
+\begin{lstlisting}[language=C, caption={Общий заголовочный файл (common.h)}]
+#ifndef COMMON_H
+#define COMMON_H
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <sys/wait.h>
+#include <errno.h>
+
+/* Константы */
+#define SHM_NAME "/shm"
+#define SHM_SIZE 1024
+#define MAX_FILENAME_LEN 256
+
+/* Сигналы */
+#define SIGNAL_READY SIGUSR1
+#define SIGNAL_START SIGUSR2
+#define SIGNAL_CHILD_EXIT SIGCHLD
+
+/* Прототипы функций для работы с разделяемой памятью */
+void* create_shared_memory(const char* name, size_t size);
+void* open_shared_memory(const char* name, size_t size);
+void close_shared_memory(void* addr, size_t size);
+void unlink_shared_memory(const char* name);
+
+#endif /* COMMON_H */
+\end{lstlisting}
+
+\subsection{Родительский процесс (parent.c)}
+
+\begin{lstlisting}[language=C, caption={Родительский процесс (parent.c)}]
+#include "common.h"
+
+/* Глобальные переменные для обработчиков сигналов */
+static volatile sig_atomic_t child_ready = 0;
+static volatile sig_atomic_t child_done = 0;
+static volatile sig_atomic_t child_exited = 0;
+static volatile sig_atomic_t child_exit_code = 0;
+static volatile sig_atomic_t child_pid = 0;
+
+/* Обработчик сигнала SIGUSR1 - дочерний процесс готов или завершил работу */
+void handle_child_done(int sig) {
+    (void)sig;
+    if (!child_ready) {
+        child_ready = 1; /* Первый сигнал - готовность */
+    } else {
+        child_done = 1; /* Второй сигнал - завершение */
+    }
+}
+
+/* Обработчик сигнала SIGCHLD - отслеживание завершения дочернего процесса */
+void handle_child_exit(int sig) {
+    int status;
+    pid_t pid;
+    
+    (void)sig;
+    
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        if (pid == child_pid) {
+            if (WIFEXITED(status)) {
+                child_exit_code = WEXITSTATUS(status);
+                if (child_exit_code != 0) {
+                    fprintf(stderr, "Child process exited with code %d\n", child_exit_code);
+                }
+            } else if (WIFSIGNALED(status)) {
+                fprintf(stderr, "Child process terminated by signal %d\n", WTERMSIG(status));
+                child_exit_code = 128 + WTERMSIG(status);
+            }
+            child_exited = 1;
+        }
+    }
+}
+
+/* Реализация функций для работы с разделяемой памятью */
+void* create_shared_memory(const char* name, size_t size) {
+    int shm_fd;
+    void* addr;
+    
+    shm_fd = shm_open(name, O_CREAT | O_RDWR, 0666);
+    if (shm_fd == -1) {
+        perror("shm_open");
+        return NULL;
+    }
+    
+    if (ftruncate(shm_fd, size) == -1) {
+        perror("ftruncate");
+        close(shm_fd);
+        shm_unlink(name);
+        return NULL;
+    }
+    
+    addr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (addr == MAP_FAILED) {
+        perror("mmap");
+        close(shm_fd);
+        shm_unlink(name);
+        return NULL;
+    }
+    
+    close(shm_fd);
+    return addr;
+}
+
+void close_shared_memory(void* addr, size_t size) {
+    if (addr != NULL && addr != MAP_FAILED) {
+        if (munmap(addr, size) == -1) {
+            perror("munmap");
+        }
+    }
+}
+
+void unlink_shared_memory(const char* name) {
+    if (shm_unlink(name) == -1) {
+        perror("shm_unlink");
+    }
+}
+
+int main(void) {
+    char filename[MAX_FILENAME_LEN];
+    char numbers_input[SHM_SIZE];
+    char* numbers_str;
+    void* shm_addr = NULL;
+    pid_t pid;
+    char* child_argv[3];
+    
+    printf("Enter result file name: ");
+    if (fgets(filename, sizeof(filename), stdin) == NULL) {
+        fprintf(stderr, "Error reading filename\n");
+        return 1;
+    }
+    
+    filename[strcspn(filename, "\n")] = '\0';
+    
+    if (strlen(filename) == 0) {
+        fprintf(stderr, "Filename cannot be empty\n");
+        return 1;
+    }
+    
+    printf("Enter numbers (separator - space): ");
+    if (fgets(numbers_input, sizeof(numbers_input), stdin) == NULL) {
+        fprintf(stderr, "Error reading numbers\n");
+        return 1;
+    }
+    
+    numbers_input[strcspn(numbers_input, "\n")] = '\0';
+    
+    if (strlen(numbers_input) == 0) {
+        fprintf(stderr, "Numbers cannot be empty\n");
+        return 1;
+    }
+    
+    shm_addr = create_shared_memory(SHM_NAME, SHM_SIZE);
+    if (shm_addr == NULL) {
+        fprintf(stderr, "Failed to create shared memory\n");
+        return 1;
+    }
+    
+    signal(SIGNAL_READY, handle_child_done);
+    signal(SIGNAL_CHILD_EXIT, handle_child_exit);
+    
+    pid = fork();
+    if (pid == -1) {
+        perror("fork");
+        close_shared_memory(shm_addr, SHM_SIZE);
+        unlink_shared_memory(SHM_NAME);
+        return 1;
+    }
+    
+    if (pid == 0) {
+        child_argv[0] = "./child";
+        child_argv[1] = filename;
+        child_argv[2] = NULL;
+        
+        if (execvp("./child", child_argv) == -1) {
+            perror("execvp");
+            exit(1);
+        }
+    } else {
+        child_pid = pid;
+        
+        numbers_str = (char*)shm_addr;
+        strncpy(numbers_str, numbers_input, SHM_SIZE - 1);
+        numbers_str[SHM_SIZE - 1] = '\0';
+        
+        while (!child_ready && !child_exited) {
+            pause();
+        }
+        
+        if (child_exited) {
+            fprintf(stderr, "Child process exited before ready. Exiting.\n");
+            close_shared_memory(shm_addr, SHM_SIZE);
+            unlink_shared_memory(SHM_NAME);
+            return 1;
+        }
+        
+        if (kill(pid, SIGNAL_START) == -1) {
+            perror("kill");
+            close_shared_memory(shm_addr, SHM_SIZE);
+            unlink_shared_memory(SHM_NAME);
+            return 1;
+        }
+        
+        while (!child_done && !child_exited) {
+            pause();
+        }
+        
+        if (child_exited && child_exit_code != 0) {
+            fprintf(stderr, "Child process failed. Exiting.\n");
+            close_shared_memory(shm_addr, SHM_SIZE);
+            unlink_shared_memory(SHM_NAME);
+            return 1;
+        }
+        
+        printf("Child process completed successfully.\n");
+        printf("Result written to file.\n");
+        
+        close_shared_memory(shm_addr, SHM_SIZE);
+        unlink_shared_memory(SHM_NAME);
+        
+        return 0;
+    }
+    
+    return 0;
+}
+\end{lstlisting}
+
+\subsection{Дочерний процесс (child.c)}
+
+\begin{lstlisting}[language=C, caption={Дочерний процесс (child.c)}]
+#include "common.h"
+
+static volatile sig_atomic_t start_flag = 0;
+
+void handle_start(int sig) {
+    (void)sig;
+    start_flag = 1;
+}
+
+void* open_shared_memory(const char* name, size_t size) {
+    int shm_fd;
+    void* addr;
+    
+    shm_fd = shm_open(name, O_RDWR, 0666);
+    if (shm_fd == -1) {
+        perror("shm_open");
+        return NULL;
+    }
+    
+    addr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (addr == MAP_FAILED) {
+        perror("mmap");
+        close(shm_fd);
+        return NULL;
+    }
+    
+    close(shm_fd);
+    return addr;
+}
+
+void close_shared_memory(void* addr, size_t size) {
+    if (addr != NULL && addr != MAP_FAILED) {
+        if (munmap(addr, size) == -1) {
+            perror("munmap");
+        }
+    }
+}
+
+int main(int argc, char* argv[]) {
+    char* filename;
+    void* shm_addr = NULL;
+    char* numbers_str;
+    float numbers[100];
+    int count = 0;
+    float result;
+    FILE* output_file;
+    pid_t parent_pid;
+    
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <result_file_name>\n", argv[0]);
+        return 1;
+    }
+    
+    filename = argv[1];
+    parent_pid = getppid();
+    
+    shm_addr = open_shared_memory(SHM_NAME, SHM_SIZE);
+    if (shm_addr == NULL) {
+        fprintf(stderr, "Failed to open shared memory\n");
+        return 1;
+    }
+    
+    signal(SIGNAL_START, handle_start);
+    
+    if (kill(parent_pid, SIGNAL_READY) == -1) {
+        perror("kill");
+        close_shared_memory(shm_addr, SHM_SIZE);
+        return 1;
+    }
+    
+    while (!start_flag) {
+        pause();
+    }
+    
+    numbers_str = (char*)shm_addr;
+    
+    {
+        char* ptr = numbers_str;
+        char* endptr;
+        float num;
+        
+        while (*ptr != '\0' && count < 100) {
+            while (*ptr == ' ' || *ptr == '\t' || *ptr == '\n') {
+                ptr++;
+            }
+            
+            if (*ptr == '\0') {
+                break;
+            }
+            
+            num = strtof(ptr, &endptr);
+            
+            if (endptr == ptr) {
+                fprintf(stderr, "Error: invalid number format\n");
+                close_shared_memory(shm_addr, SHM_SIZE);
+                return 1;
+            }
+            
+            numbers[count] = num;
+            count++;
+            ptr = endptr;
+        }
+    }
+    
+    if (count < 2) {
+        fprintf(stderr, "Error: at least 2 numbers required\n");
+        close_shared_memory(shm_addr, SHM_SIZE);
+        return 1;
+    }
+    
+    result = numbers[0];
+    for (int i = 1; i < count; i++) {
+        if (numbers[i] == 0.0f) {
+            fprintf(stderr, "Error: division by zero\n");
+            close_shared_memory(shm_addr, SHM_SIZE);
+            return 1;
+        }
+        result /= numbers[i];
+    }
+    
+    output_file = fopen(filename, "w");
+    if (output_file == NULL) {
+        perror("fopen");
+        close_shared_memory(shm_addr, SHM_SIZE);
+        return 1;
+    }
+    
+    if (fprintf(output_file, "%.6f\n", result) < 0) {
+        perror("fprintf");
+        fclose(output_file);
+        close_shared_memory(shm_addr, SHM_SIZE);
+        return 1;
+    }
+    
+    if (fclose(output_file) != 0) {
+        perror("fclose");
+        close_shared_memory(shm_addr, SHM_SIZE);
+        return 1;
+    }
+    
+    if (kill(parent_pid, SIGNAL_READY) == -1) {
+        perror("kill");
+        close_shared_memory(shm_addr, SHM_SIZE);
+        return 1;
+    }
+    
+    close_shared_memory(shm_addr, SHM_SIZE);
+    
+    return 0;
+}
+\end{lstlisting}
+
+
+

@@ -1,0 +1,62 @@
+\section{Результаты}
+
+\subsection{Компиляция программы}
+
+Программа компилируется с помощью Makefile:
+
+\begin{lstlisting}[language=bash]
+make
+\end{lstlisting}
+
+Или вручную:
+\begin{lstlisting}[language=bash]
+gcc -Wall -Wextra -std=c11 -o parent parent.c -lrt
+gcc -Wall -Wextra -std=c11 -o child child.c -lrt
+\end{lstlisting}
+
+Флаг \texttt{-lrt} необходим для линковки библиотеки POSIX shared memory.
+
+\subsection{Тестирование программы}
+
+\subsubsection{Тест 1: Нормальная работа}
+
+\textbf{Ввод:}
+\begin{verbatim}
+$ ./parent
+Enter result file name: output.txt
+Enter numbers (separator - space): 12.5 2 0.5 5
+Child process completed successfully.
+Result written to file.
+\end{verbatim}
+
+\textbf{Содержимое файла output.txt:}
+\begin{verbatim}
+1.250000
+\end{verbatim}
+
+\textbf{Проверка:} $12.5 / 2 / 0.5 / 5 = 1.25$
+
+\subsection{Ключевые особенности решения}
+
+\begin{enumerate}
+    \item \textbf{Разделяемая память}: Использование POSIX shared memory (\texttt{shm\_open}, \texttt{mmap}) обеспечивает эффективную передачу данных между процессами без использования файлов или каналов.
+    
+    \item \textbf{Синхронизация через сигналы}: Использование сигналов SIGUSR1 и SIGUSR2 для синхронизации процессов позволяет координировать выполнение без блокирующих операций.
+    
+    \item \textbf{Обработка завершения дочернего процесса}: Использование обработчика SIGCHLD позволяет родительскому процессу корректно обрабатывать случаи, когда дочерний процесс завершается с ошибкой (например, при делении на ноль).
+    
+    \item \textbf{Корректная очистка ресурсов}: Программа корректно закрывает разделяемую память через \texttt{munmap()} и удаляет объекты через \texttt{shm\_unlink()} как при нормальном завершении, так и при ошибках.
+    
+    \item \textbf{Обработка ошибок}: Все системные вызовы проверяются на ошибки, что обеспечивает надёжность программы и предотвращает утечки ресурсов.
+    
+    \item \textbf{Разделение процессов}: Родительский и дочерний процессы представлены отдельными программами, что обеспечивает модульность и возможность независимой компиляции.
+\end{enumerate}
+
+\subsection{Проверка работы разделяемой памяти}
+
+Для проверки существования объекта разделяемой памяти можно использовать команду:
+\begin{lstlisting}[language=bash]
+ls -l /dev/shm/
+\end{lstlisting}
+
+После завершения программы объект \texttt{/shm} должен быть удалён благодаря вызову \texttt{shm\_unlink()} в родительском процессе.

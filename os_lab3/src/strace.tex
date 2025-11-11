@@ -1,0 +1,61 @@
+\section{Strace}
+\begin{alltt}
+\scriptsize
+    execve("./parent", ["./parent"], 0x7ffd0cec30f0 /* 27 vars */) = 0
+    brk(NULL)                               = 0x618aa573b000
+    arch_prctl(0x3001 /* ARCH_??? */, 0x7ffc202cfa00) = -1 EINVAL (Invalid argument)
+    mmap(NULL, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x71d053c09000
+    access("/etc/ld.so.preload", R_OK)      = -1 ENOENT (No such file or directory)
+    openat(AT_FDCWD, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3
+    newfstatat(3, "", {st_mode=S_IFREG|0644, st_size=17800, ...}, AT_EMPTY_PATH) = 0
+    mmap(NULL, 17800, PROT_READ, MAP_PRIVATE, 3, 0) = 0x71d053c04000
+    close(3)                                = 0
+    openat(AT_FDCWD, "/lib/x86_64-linux-gnu/libc.so.6", O_RDONLY|O_CLOEXEC) = 3
+    read(3, "\177ELF\2\1\1\3\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0P\237\2\0\0\0\0\0"..., 832) = 832
+    pread64(3, "\6\0\0\0\4\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0"..., 784, 64) = 784
+    pread64(3, "\4\0\0\0 \0\0\0\5\0\0\0GNU\0\2\0\0\300\4\0\0\0\3\0\0\0\0\0\0\0"..., 48, 848) = 48
+    pread64(3, "\4\0\0\0\24\0\0\0\3\0\0\0GNU\0O{\f\225\\=\201\327\312\301P\32$\230\266\235"..., 68, 896) = 68
+    newfstatat(3, "", {st_mode=S_IFREG|0755, st_size=2220400, ...}, AT_EMPTY_PATH) = 0
+    pread64(3, "\6\0\0\0\4\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0"..., 784, 64) = 784
+    mmap(NULL, 2264656, PROT_READ, MAP_PRIVATE|MAP_DENYWRITE, 3, 0) = 0x71d053800000
+    mprotect(0x71d053828000, 2023424, PROT_NONE) = 0
+    mmap(0x71d053828000, 1658880, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x28000) = 0x71d053828000
+    mmap(0x71d0539bd000, 360448, PROT_READ, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x1bd000) = 0x71d0539bd000
+    mmap(0x71d053a16000, 24576, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x215000) = 0x71d053a16000
+    mmap(0x71d053a1c000, 52816, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0) = 0x71d053a1c000
+    close(3)                                = 0
+    mmap(NULL, 12288, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x71d053c01000
+    arch_prctl(ARCH_SET_FS, 0x71d053c01740) = 0
+    set_tid_address(0x71d053c01a10)         = 18414
+    set_robust_list(0x71d053c01a20, 24)     = 0
+    rseq(0x71d053c020e0, 0x20, 0, 0x53053053) = 0
+    mprotect(0x71d053a16000, 16384, PROT_READ) = 0
+    mprotect(0x618aa3ef5000, 4096, PROT_READ) = 0
+    mprotect(0x71d053c43000, 8192, PROT_READ) = 0
+    prlimit64(0, RLIMIT_STACK, NULL, {rlim_cur=8192*1024, rlim_max=RLIM64_INFINITY}) = 0
+    munmap(0x71d053c04000, 17800)           = 0
+    newfstatat(1, "", {st_mode=S_IFCHR|0620, st_rdev=makedev(0x88, 0), ...}, AT_EMPTY_PATH) = 0
+    getrandom("\xd2\x46\xfd\xa6\x14\x3c\x8e\xf8", 8, GRND_NONBLOCK) = 8
+    brk(NULL)                               = 0x618aa573b000
+    brk(0x618aa575c000)                     = 0x618aa575c000
+    newfstatat(0, "", {st_mode=S_IFCHR|0620, st_rdev=makedev(0x88, 0), ...}, AT_EMPTY_PATH) = 0
+    write(1, "Enter result file name: ", 24) = 24
+    read(0, "res.txt\n", 1024)              = 8
+    write(1, "Enter numbers (separator - space"..., 35) = 35
+    read(0, "10 3 4 5 2\n", 1024)           = 11
+    openat(AT_FDCWD, "/dev/shm/shm", O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0666) = 3
+    ftruncate(3, 1024)                      = 0
+    mmap(NULL, 1024, PROT_READ|PROT_WRITE, MAP_SHARED, 3, 0) = 0x71d053c42000
+    close(3)                                = 0
+    rt_sigaction(SIGUSR1, {sa_handler=0x618aa3ef33e9, sa_mask=[], sa_flags=SA_RESTORER|SA_INTERRUPT|SA_NODEFER|SA_RESETHAND|0xffffffff00000000, sa_restorer=0x71d053842520}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+    rt_sigaction(SIGCHLD, {sa_handler=0x618aa3ef3417, sa_mask=[], sa_flags=SA_RESTORER|SA_INTERRUPT|SA_NODEFER|SA_RESETHAND|0xffffffff00000000, sa_restorer=0x71d053842520}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+    clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x71d053c01a10) = 18449
+    pause()                                 = ? ERESTARTNOHAND (To be restarted if no handler)
+    --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_USER, si_pid=18449, si_uid=1000} ---
+    rt_sigreturn({mask=[]})                 = -1 EINTR (Interrupted system call)
+    kill(18449, SIGUSR2)                    = 0
+    pause()                                 = ? ERESTARTNOHAND (To be restarted if no handler)
+    --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_USER, si_pid=18449, si_uid=1000} ---
+    +++ killed by SIGUSR1 +++
+
+\end{alltt}
