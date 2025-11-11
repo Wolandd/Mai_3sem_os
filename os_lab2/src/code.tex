@@ -1,0 +1,138 @@
+\section{Исходная программа}
+
+\subsection{main.c}
+
+\begin{lstlisting}[language=C]
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+
+#include "find_min_max.h"
+
+static void fill_random(int *data, size_t len) {
+    for (size_t i = 0; i < len; ++i) {
+        data[i] = rand() % 200001 - 100000;
+    }
+}
+
+int main(int argc, char *argv[]) {
+    if (argc < 3) {
+        fprintf(stderr, "Usage: %s <array_size> <max_threads>\n", argv[0]);
+        return 1;
+    }
+
+    size_t len = (size_t)atoll(argv[1]);
+    int max_threads = atoi(argv[2]);
+    if (len == 0 || max_threads <= 0) {
+        fprintf(stderr, "Array size and thread count must be > 0\n");
+        return 1;
+    }
+
+    int *data = malloc(len * sizeof(int));
+    if (!data) {
+        perror("malloc");
+        return 1;
+    }
+
+    srand((unsigned)time(NULL));
+    fill_random(data, len);
+
+    clock_t start = clock();
+    MinMax res = find_min_max(data, len, max_threads);
+    clock_t end = clock();
+
+    printf("Min: %d\nMax: %d\n", res.min, res.max);
+    printf("Threads: %d\n", max_threads);
+    printf("Time: %.4f s\n", (double)(end - start) / CLOCKS_PER_SEC);
+
+    free(data);
+    return 0;
+}
+\end{lstlisting}
+
+\subsection{find\_min\_max.h}
+
+\begin{lstlisting}[language=C]
+#ifndef FIND_MIN_MAX_H
+#define FIND_MIN_MAX_H
+
+#include <stddef.h>
+
+typedef struct {
+    int min;
+    int max;
+} MinMax;
+
+MinMax find_min_max(const int *data, size_t len, int max_threads);
+
+#endif
+\end{lstlisting}
+
+\subsection{find\_min\_max.c}
+
+\begin{lstlisting}[language=C]
+#include "find_min_max.h"
+
+#include <limits.h>
+#include <pthread.h>
+#include <stddef.h>
+
+typedef struct {
+    const int *data;
+    size_t start;
+    size_t end;
+    MinMax *out;
+} ThreadArgs;
+
+static void *worker(void *arg) {
+    ThreadArgs *a = (ThreadArgs *)arg;
+    int local_min = a->data[a->start];
+    int local_max = a->data[a->start];
+
+    for (size_t i = a->start + 1; i < a->end; ++i) {
+        int v = a->data[i];
+        if (v < local_min) local_min = v;
+        if (v > local_max) local_max = v;
+    }
+
+    a->out->min = local_min;
+    a->out->max = local_max;
+    return NULL;
+}
+
+MinMax find_min_max(const int *data, size_t len, int max_threads) {
+    MinMax result = { .min = INT_MAX, .max = INT_MIN };
+    if (len == 0 || max_threads <= 0) return result;
+
+    size_t threads_count = (size_t)max_threads;
+    if (threads_count > len) threads_count = len;
+
+    pthread_t threads[threads_count];
+    ThreadArgs args[threads_count];
+    MinMax partial[threads_count];
+
+    size_t chunk = (len + threads_count - 1) / threads_count;
+    size_t created = 0;
+
+    for (size_t t = 0, start = 0; t < threads_count && start < len; ++t, start += chunk) {
+        size_t end = start + chunk;
+        if (end > len) end = len;
+
+        args[t].data = data;
+        args[t].start = start;
+        args[t].end = end;
+        args[t].out = &partial[t];
+
+        pthread_create(&threads[t], NULL, worker, &args[t]);
+        ++created;
+    }
+
+    for (size_t t = 0; t < created; ++t) {
+        pthread_join(threads[t], NULL);
+        if (partial[t].min < result.min) result.min = partial[t].min;
+        if (partial[t].max > result.max) result.max = partial[t].max;
+    }
+
+    return result;
+}
+\end{lstlisting}

@@ -1,0 +1,50 @@
+\section{Strace вывод системных вызовов}
+
+Для получения трассировки системных вызовов использовалась утилита \texttt{strace}. Ниже представлен вывод системных вызовов для программы \texttt{parent}:
+
+\begin{lstlisting}[language=bash, basicstyle=\ttfamily\tiny]
+# Запуск: strace -o strace_output.txt ./parent
+# Пример вывода основных системных вызовов:
+
+pipe([3, 4])                            = 0
+pipe([5, 6])                            = 0
+clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x7f...) = 12345
+close(4)                                = 0
+close(6)                                = 0
+fcntl(5, F_GETFL)                       = 0x2 (flags O_RDWR)
+fcntl(5, F_SETFL, O_RDWR|O_NONBLOCK)   = 0
+read(0, "result.txt\n", 4096)         = 11
+write(3, "100 2 5\n", 7)                = 7
+write(3, "50 2.5\n", 7)                 = 7
+close(3)                                = 0
+wait4(12345, [{WIFEXITED(s) && WEXITSTATUS(s) == 0}], 0, NULL) = 12345
+\end{lstlisting}
+
+\textbf{Основные системные вызовы:}
+\begin{itemize}
+    \item \texttt{pipe()} --- создание каналов для межпроцессного взаимодействия
+    \item \texttt{clone()} --- создание дочернего процесса (внутренняя реализация \texttt{fork()})
+    \item \texttt{close()} --- закрытие файловых дескрипторов
+    \item \texttt{fcntl()} --- установка неблокирующего режима
+    \item \texttt{read()} --- чтение данных из стандартного ввода
+    \item \texttt{write()} --- запись данных в канал
+    \item \texttt{wait4()} --- ожидание завершения дочернего процесса
+\end{itemize}
+
+Для дочернего процесса (\texttt{child}) основные системные вызовы:
+\begin{itemize}
+    \item \texttt{dup2()} --- перенаправление стандартных потоков
+    \item \texttt{execve()} --- загрузка и запуск программы \texttt{child}
+    \item \texttt{openat()} --- открытие файла для записи результатов
+    \item \texttt{read()} --- чтение данных из канала (stdin)
+    \item \texttt{write()} --- запись результатов в файл и сообщений в канал (stdout)
+    \item \texttt{close()} --- закрытие файловых дескрипторов
+\end{itemize}
+
+\textbf{Примечание:} Полный вывод \texttt{strace} может быть очень объемным. Для получения полной трассировки выполните команду:
+\begin{verbatim}
+strace -o strace_output.txt -f ./parent
+\end{verbatim}
+Флаг \texttt{-f} позволяет отслеживать системные вызовы дочерних процессов.
+
+

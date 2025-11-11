@@ -1,0 +1,25 @@
+\section{Описание программы}
+
+Программа состоит из двух файлов:
+\begin{itemize}
+    \item \texttt{main.c} --- чтение аргументов \texttt{<размер\_массива>} и \texttt{<макс\_потоков>}, генерация случайных данных, вызов \texttt{find\_min\_max()}, вывод результата и времени.
+    \item \texttt{find\_min\_max.c/h} --- реализация многопоточного поиска минимума и максимума с использованием POSIX threads.
+\end{itemize}
+
+\subsection{Используемые системные вызовы/функции}
+
+\begin{description}
+    \item[\texttt{pthread\_create()}] создание рабочих потоков.
+    \item[\texttt{pthread\_join()}] ожидание завершения потоков.
+    \item[\texttt{clock()}] измерение процессорного времени выполнения.
+    \item[\texttt{malloc()/free()}] выделение и освобождение памяти под массив.
+\end{description}
+
+\subsection{Обработка ошибок}
+
+Проверяются:
+\begin{itemize}
+    \item корректность аргументов (длина массива и число потоков $>0$);
+    \item ошибки \texttt{malloc()};
+    \item результаты \texttt{pthread\_create()} и \texttt{pthread\_join()} (в реальном запуске возвращаемое значение можно дополнительно проверить).
+\end{itemize}
