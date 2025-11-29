@@ -1,0 +1,60 @@
+\section{Метод решения}
+
+\subsection{Общее описание алгоритма}
+
+Проект состоит из двух динамических библиотек (\texttt{libimpl1.so} и \texttt{libimpl2.so}) и двух программ (\texttt{program1} и \texttt{program2}), демонстрирующих различные способы линковки с библиотеками.
+
+Программа \texttt{program1} выполняет следующие действия:
+\begin{enumerate}
+    \item Статически линкуется с библиотекой \texttt{libimpl1.so} на этапе компиляции
+    \item В цикле читает команды от пользователя
+    \item Обрабатывает команды: вычисление интеграла и перевод числа в двоичную систему
+    \item Использует функции из библиотеки напрямую
+\end{enumerate}
+
+Программа \texttt{program2} выполняет следующие действия:
+\begin{enumerate}
+    \item Динамически загружает библиотеки во время выполнения через \texttt{dlopen()}
+    \item Получает указатели на функции через \texttt{dlsym()}
+    \item Позволяет переключаться между реализациями \texttt{impl1} и \texttt{impl2}
+    \item Выгружает библиотеку при завершении через \texttt{dlclose()}
+\end{enumerate}
+
+Библиотека \texttt{impl1} содержит:
+\begin{enumerate}
+    \item Функцию \texttt{SinIntegral()} для вычисления интеграла методом прямоугольников
+    \item Функцию \texttt{translation()} для перевода числа в двоичную систему счисления
+\end{enumerate}
+
+Библиотека \texttt{impl2} содержит:
+\begin{enumerate}
+    \item Функцию \texttt{SinIntegral()} для вычисления интеграла методом трапеций
+    \item Функцию \texttt{translation()} для перевода числа в троичную систему счисления
+\end{enumerate}
+
+\subsection{Архитектура программы}
+
+\begin{itemize}
+    \item Библиотека impl1 (libimpl1.so)
+    \begin{itemize}
+        \item sin\_integral.c: метод прямоугольников для вычисления интеграла
+        \item translation.c: перевод в двоичную систему
+    \end{itemize}
+    \item Библиотека impl2 (libimpl2.so)
+    \begin{itemize}
+        \item sin\_integral.c: метод трапеций для вычисления интеграла
+        \item translation.c: перевод в троичную систему
+    \end{itemize}
+    \item Программа program1
+    \begin{itemize}
+        \item Статическая линковка с libimpl1.so
+        \item Прямой вызов функций из библиотеки
+    \end{itemize}
+    \item Программа program2
+    \begin{itemize}
+        \item Динамическая загрузка библиотек через dlopen()
+        \item Получение указателей на функции через dlsym()
+        \item Возможность переключения между реализациями
+    \end{itemize}
+\end{itemize}
+

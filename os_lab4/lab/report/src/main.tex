@@ -1,0 +1,93 @@
+\documentclass[12pt,a4paper]{article}
+
+% Кодировка
+\usepackage[utf8]{inputenc}
+\usepackage[T2A]{fontenc}
+\usepackage[english,russian]{babel}
+
+% Геометрия страницы
+\usepackage[top=2cm, bottom=2cm, left=3cm, right=1.5cm]{geometry}
+
+% Математика
+\usepackage{amsmath}
+
+% Код
+\usepackage{listings}
+\usepackage{xcolor}
+
+% Настройка для листингов
+\lstset{
+    language=C,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue}\bfseries,
+    commentstyle=\color{green!60!black},
+    stringstyle=\color{red},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    stepnumber=1,
+    numbersep=5pt,
+    backgroundcolor=\color{gray!10},
+    frame=single,
+    breaklines=true,
+    breakatwhitespace=true,
+    tabsize=4,
+    showspaces=false,
+    showstringspaces=false
+}
+
+% Графика
+\usepackage{graphicx}
+\usepackage{float}
+
+% Гиперссылки
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,      
+    urlcolor=cyan
+}
+
+% Заголовки
+\usepackage{titlesec}
+\titleformat{\section}{\Large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{1em}{}
+
+% Отступы
+\setlength{\parindent}{1.25cm}
+\setlength{\parskip}{0.5em}
+
+% Заголовок документа
+\title{Лабораторная работа №1\\Межпроцессное взаимодействие через каналы (pipes)}
+\author{Бурмакин М.А.\\Группа: М8О-207БВ-24}
+\date{\today}
+
+\begin{document}
+
+% Титульный лист
+\maketitle
+\thispagestyle{empty}
+\newpage
+
+% Условие
+\input{sections/condition}
+
+% Метод решения
+\input{sections/method}
+
+% Описание программы
+\input{sections/description}
+
+% Результаты
+\input{sections/results}
+
+% Выводы
+\input{sections/conclusion}
+
+% Исходный код
+\input{sections/code}
+
+% Strace
+\input{sections/strace}
+
+\end{document}
