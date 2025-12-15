@@ -1,0 +1,152 @@
+\section{Метод решения}
+
+Для анализа корректности реализации лабораторных работ и подтверждения использования требуемых системных вызовов каждая из разработанных программ была запущена с использованием утилиты \texttt{strace}. Эта утилита позволяет перехватывать и логировать все системные вызовы, выполняемые процессом во время его работы, включая передаваемые аргументы и возвращаемые значения. \\
+Для каждой лабораторной работы был сформирован отдельный лог-файл с помощью команды вида: \\
+\texttt{strace -o labN.strace ./labN\_executable [аргументы]}, \\
+где \texttt{labN.strace} — имя файла трассировки, а \texttt{labN\_executable} — исполняемый файл, соответствующий заданию лабораторной работы \texttt{N}. \\
+После получения логов проводился их ручной и частично автоматизированный анализ с целью:
+\begin{itemize}
+    \item выявления ключевых системных вызовов, требуемых вариантом задания;
+    \item проверки правильности их использования (порядок вызовов, обработка ошибок, корректность аргументов);
+    \item подтверждения соответствия поведения программы ожидаемому сценарию работы (создание процессов, синхронизация, обмен данными и т.д.).
+\end{itemize}
+\vspace{1\baselineskip}
+
+Ссылки:
+
+\begin{itemize}
+\item \url{https://man7.org/linux/man-pages/man1/strace.1.html}
+\item \url{https://man7.org/linux/man-pages/man2/syscalls.2.html?spm=a2ty_o01.29997173.0.0.4d2f5171E111lX}
+\item \url{https://man7.org/tlpi/?spm=a2ty_o01.29997173.0.0.4d2f5171E111lX}
+\item \url{https://beej.us/guide/bgipc/?spm=a2ty_o01.29997173.0.0.4d2f5171E111lX}
+\item \url{https://jvns.ca/strace-zine-v2.pdf?spm=a2ty_o01.29997173.0.0.4d2f5171E111lX&file=strace-zine-v2.pdf}
+\item \url{https://chromium.googlesource.com/chromiumos/docs/+/master/constants/syscalls.md?spm=a2ty_o01.29997173.0.0.4d2f5171E111lX&file=syscalls.md}
+\item \url{https://www.redhat.com/sysadmin/strace-tool?spm=a2ty_o01.29997173.0.0.4d2f5171E111lX}
+\end{itemize}
+\pagebreak
+
+\section{Описание программы}
+\section{Описание strace к Лабораторной работе №1}\\
+
+\begin{lstlisting}
+pipe2([3, 4], 0)                        = 0
+pipe2([5, 6], 0)                        = 0
+\end{lstlisting}
+Создаёт первый канал (\texttt{pipe1}) для передачи данных от родительского процесса к дочернему. Дескриптор \texttt{3} — конец для чтения, \texttt{4} — конец для записи. В дальнейшем родитель запишет в \texttt{4}, а дочерний — прочитает из \texttt{3}. Это обеспечивает передачу пользовательских данных в дочерний процесс без использования глобальной памяти или файлов.\\
+Создаёт второй канал (\texttt{pipe2}) для обратной связи — от дочернего процесса к родительскому. Дескриптор \texttt{5} — чтение (в родителе), \texttt{6} — запись (в дочернем). \\
+
+\begin{lstlisting}
+clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x7a48cec81a10) = 133320
+\end{lstlisting}
+Создаёт новый процесс (\texttt{PID 133320}), который будет выполнять роль дочернего. Использование \texttt{clone()} с флагами, эквивалентными \texttt{fork()}, корректно для создания независимого процесса. Флаг \texttt{SIGCHLD} гарантирует, что родитель получит сигнал при завершении дочернего — важно для последующей синхронизации.\\
+
+\begin{lstlisting}
+38033 dup2(3, 0 <unfinished ...>
+38018 fcntl(5, F_SETFL, O_RDONLY|O_NONBLOCK <unfinished ...>
+38033 <... dup2 resumed>)               = 0
+38018 <... fcntl resumed>)              = 0
+38033 dup2(6, 1 <unfinished ...>
+\end{lstlisting}
+Дочерний процесс (PID 38033) перенаправляет чтение из канала 3 на стандартный ввод (\texttt{stdin}, дескриптор 0) с помощью \texttt{dup2(3, 0)}, а запись в канал 6 — на стандартный вывод (\texttt{stdout}, дескриптор 1) через \texttt{dup2(6, 1)}. Благодаря этому дочерняя программа может читать и писать данные обычными операциями, не зная, что данные приходят из каналов. Родительский процесс устанавливает неблокирующий режим для обратного канала через \texttt{fcntl(5, F\_SETFL, O\_NONBLOCK)}.\\
+
+\begin{lstlisting}
+38033 execve("./child", ["child", "res.txt"], 0x7ffe4986a5c8 /* 27 vars */) = 0
+\end{lstlisting}
+Полностью заменяет образ дочернего процесса на исполняемый файл \texttt{./child}, передавая ему имя выходного файла (\texttt{res.txt}) в качестве аргумента командной строки. Это прямое выполнение требования: «родительский и дочерний процесс должны быть представлены разными программами». Без этого вызова программа не соответствовала бы заданию.\\
+
+\begin{lstlisting}
+38018 wait4(38033, [{WIFEXITED(s) && WEXITSTATUS(s) == 0}], 0, NULL) = 38033
+--- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=38033, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+\end{lstlisting}
+Родительский процесс ожидает завершения дочернего процесса через \texttt{wait4()} и получает сигнал \texttt{SIGCHLD}, подтверждающий корректное завершение дочернего процесса с кодом 0. Это гарантирует, что родитель дождётся завершения дочернего процесса перед своим завершением.\\ \\ \\
+
+\section{Описание strace к Лабораторной работе №2}\\
+
+\begin{lstlisting}
+execve("./find_min_max", ["./find_min_max", "100", "4"], 0x7ffcaf315b70 /* 27 vars */) = 0
+\end{lstlisting}
+Запуск программы с аргументами: количество элементов массива (100) и количество потоков (4). Это соответствует требованию задания — количество потоков задаётся ключом запуска.\\
+
+\begin{lstlisting}
+clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x74dafdfff910, parent_tid=0x74dafdfff910, exit_signal=0, stack=0x74dafd7ff000, stack_size=0x7fff00, tls=0x74dafdfff640} => {parent_tid=[6309]}, 88) = 6309
+\end{lstlisting}
+(и ещё 3 аналогичных вызова с PID 6310–6312)
+Создание 4 рабочих потоков с помощью системного вызова \texttt{clone3} с флагом \texttt{CLONE\_THREAD}. Это стандартный способ создания потоков в Linux при использовании библиотеки pthreads. Все потоки разделяют адресное пространство, открытые файлы и обработчики сигналов, но имеют собственные стеки и регистры — обеспечивая параллельное выполнение поиска минимума и максимума в массиве.\\
+
+\begin{lstlisting}
+mmap(NULL, 8392704, PROT_NONE, MAP_PRIVATE|MAP_ANONYMOUS|MAP_STACK, -1, 0) = 0x74dafd7ff000
+mprotect(0x74dafd800000, 8388608, PROT_READ|PROT_WRITE) = 0
+\end{lstlisting}
+Выделение и настройка стека размером ~8 МБ для каждого нового потока. Это необходимая часть инициализации потока в POSIX-совместимых системах.\\
+
+\begin{lstlisting}
+futex(0x74dafc7fc910, FUTEX_WAIT_BITSET|FUTEX_CLOCK_REALTIME, 6312, NULL, FUTEX_BITSET_MATCH_ANY) = 0
+\end{lstlisting}
+Главный поток ожидает завершения рабочих потоков с помощью системного вызова \texttt{futex} — примитива синхронизации ядра Linux, лежащего в основе \texttt{pthread\_join()}. Это гарантирует, что вывод результата произойдёт только после окончания всех вычислений.\\
+
+\section{Описание strace к Лабораторной работе №3}\\
+
+\begin{lstlisting}
+openat(AT_FDCWD, "/dev/shm/shm", O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0666) = 3
+\end{lstlisting}
+Создаёт именованный разделяемый объект в каталоге \texttt{/dev/shm} (tmpfs, RAM-backed файловая система). Это POSIX-совместимый способ организации разделяемой памяти через \texttt{memory-mapped} файлы, как того требует задание.\\
+
+\begin{lstlisting}
+ftruncate(3, 1024)                      = 0
+\end{lstlisting}
+Устанавливает размер разделяемого объекта в 1024 байта, чтобы гарантировать, что отображённая в память область имеет фиксированный размер — необходимо для корректной работы \texttt{mmap}.\\
+
+\begin{lstlisting}
+mmap(NULL, 1024, PROT_READ|PROT_WRITE, MAP_SHARED, 3, 0) = 0x71d053c42000
+\end{lstlisting}
+Отображает разделяемый файл в виртуальное адресное пространство родительского процесса с флагом \texttt{MAP\_SHARED}, что означает: все изменения в этой области будут видны другим процессам, отобразившим тот же файл. Это основной механизм обмена данными между процессами в данной лабораторной работе.\\
+
+\begin{lstlisting}
+rt_sigaction(SIGUSR1, {sa_handler=0x618aa3ef33e9, sa_mask=[], sa_flags=SA_RESTORER|SA_INTERRUPT|SA_NODEFER|SA_RESETHAND|0xffffffff00000000, sa_restorer=0x71d053842520}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+rt_sigaction(SIGCHLD, {sa_handler=0x618aa3ef3417, sa_mask=[], sa_flags=SA_RESTORER|SA_INTERRUPT|SA_NODEFER|SA_RESETHAND|0xffffffff00000000, sa_restorer=0x71d053842520}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+\end{lstlisting}
+Родительский процесс регистрирует обработчики сигналов \texttt{SIGUSR1} и \texttt{SIGCHLD} для синхронизации с дочерним процессом. Это часть схемы синхронизации на основе сигналов.\\
+
+\begin{lstlisting}
+clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x71d053c01a10) = 18449
+\end{lstlisting}
+Создаёт дочерний процесс (\texttt{PID 18449}) для выполнения вычислений. Дочерний процесс будет использовать ту же разделяемую память, отображённую через \texttt{mmap}.\\
+
+\begin{lstlisting}
+--- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_USER, si_pid=18449, si_uid=1000} ---
+\end{lstlisting}
+Дочерний процесс отправил родителю пользовательский сигнал \texttt{SIGUSR1}, сигнализируя о готовности данных или завершении вычислений. Это реализует взаимодействие через системные сигналы, как того требует задание.\\
+
+\section{Описание strace к Лабораторной работе №4}\\
+
+\begin{lstlisting}
+openat(AT_FDCWD, "/home/woland/os_labs/os_lab4/lab/build/src/impl1/libimpl1.so.1", O_RDONLY|O_CLOEXEC) = 3
+\end{lstlisting}
+Программа открывает динамическую библиотеку \texttt{libimpl1.so.1} из каталога \texttt{impl1}. Это первая реализация контракта — вычисление интеграла и перевод числа в двоичную систему. Загрузка происходит автоматически загрузчиком при старте программы, так как библиотека указана в зависимостях на этапе линковки.\\
+
+\begin{lstlisting}
+mmap(NULL, 16440, PROT_READ, MAP_PRIVATE|MAP_DENYWRITE, 3, 0) = 0x7d2d2b528000
+mmap(0x7d2d2b529000, 4096, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x1000) = 0x7d2d2b529000
+mmap(0x7d2d2b52a000, 4096, PROT_READ, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x2000) = 0x7d2d2b52a000
+mmap(0x7d2d2b52b000, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x2000) = 0x7d2d2b52b000
+\end{lstlisting}
+Ядро отображает содержимое библиотеки в виртуальное адресное пространство процесса:
+\begin{itemize}
+    \item \texttt{PROT\_READ|PROT\_EXEC} — для секции кода (.text),
+    \item \texttt{PROT\_READ|PROT\_WRITE} — для секции данных (.data, .bss).
+\end{itemize}
+Это стандартный механизм загрузки ELF-объектов (\texttt{dlopen} внутри использует \texttt{mmap}).\\
+
+\begin{lstlisting}
+openat(AT_FDCWD, "../impl1/libimpl1.so", O_RDONLY|O_CLOEXEC) = 3
+getcwd("/home/woland/os_labs/os_lab4/lab/build/src/program2", 128) = 52
+\end{lstlisting}
+Программа определяет текущий рабочий каталог через \texttt{getcwd}, чтобы корректно разрешать относительные пути к библиотекам (\texttt{../impl1/libimpl1.so}). Это соответствует требованию: «загружать библиотеки, используя только их относительные пути». Затем загружается библиотека во время выполнения через \texttt{dlopen}.\\
+
+\begin{lstlisting}
+munmap(0x782548455000, 16440)           = 0
+munmap(0x782548119000, 942344)          = 0
+\end{lstlisting}
+Библиотеки выгружаются из памяти (через \texttt{dlclose}, который вызывает \texttt{munmap}) при завершении программы или при переключении реализаций. Это предотвращает утечки памяти и позволяет корректно заменить реализации.\\
+
+\pagebreak
