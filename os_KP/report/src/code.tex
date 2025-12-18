@@ -1,0 +1,244 @@
+\section{Исходная программа}
+
+\subsection{Заголовочный файл shared.h}
+
+\begin{lstlisting}[language=C]
+#ifndef SHARED_H
+#define SHARED_H
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <time.h>
+#include <errno.h>
+
+#define MAX_PLAYERS 4
+#define MAX_WORD_LEN 20
+#define MAX_NAME_LEN 50
+#define PIPE_SERVER_NAME "/tmp/bulls_cows_server"
+#define PIPE_CLIENT_TEMPLATE "/tmp/bulls_cows_client_%d"
+
+#define BUFFER_SIZE 256
+#define PIPE_NAME_LENGTH 50
+
+#ifndef DEBUG
+#define DEBUG 0
+#endif
+
+typedef struct {
+    int id;
+    char name[MAX_NAME_LEN];
+    int active;
+    char pipe_name[PIPE_NAME_LENGTH];
+} Player;
+
+typedef struct {
+    char secret_word[MAX_WORD_LEN];
+    Player players[MAX_PLAYERS];
+    int player_count;
+    int game_active;
+} Game;
+
+#endif
+\end{lstlisting}
+
+\subsection{Функция проверки предположения (game\_logic.c)}
+
+\begin{lstlisting}[language=C]
+void check_guess(const char *secret, const char *guess, int *bulls, int *cows) {
+    *bulls = 0;
+    *cows = 0;
+    
+    int secret_len = strlen(secret);
+    int guess_len = strlen(guess);
+    
+    if (secret_len != guess_len) {
+        return;
+    }
+    
+    int secret_used[secret_len];
+    int guess_used[guess_len];
+    
+    for (int i = 0; i < secret_len; i++) {
+        secret_used[i] = 0;
+        guess_used[i] = 0;
+    }
+    
+    for (int i = 0; i < secret_len; i++) {
+        if (secret[i] == guess[i]) {
+            (*bulls)++;
+            secret_used[i] = 1;
+            guess_used[i] = 1;
+        }
+    }
+    
+    for (int i = 0; i < guess_len; i++) {
+        if (guess_used[i]) {
+            continue;
+        }
+        
+        for (int j = 0; j < secret_len; j++) {
+            if (secret_used[j]) {
+                continue;
+            }
+            
+            if (secret[j] == guess[i]) {
+                (*cows)++;
+                secret_used[j] = 1;
+                guess_used[i] = 1;
+                break;
+            }
+        }
+    }
+}
+\end{lstlisting}
+
+\subsection{Обработка подключения клиента (server.c)}
+
+\begin{lstlisting}[language=C]
+void handle_client_connect(int player_id, const char *player_name) {
+    if (find_player_index(player_id) != -1) {
+        LOG_ERROR("Игрок с ID %d уже подключен", player_id);
+        return;
+    }
+    
+    if (game.player_count >= required_players) {
+        LOG_ERROR("Достигнуто максимальное количество игроков");
+        return;
+    }
+    
+    char client_pipe_name[PIPE_NAME_LENGTH];
+    snprintf(client_pipe_name, PIPE_NAME_LENGTH, PIPE_CLIENT_TEMPLATE, player_id);
+    
+    struct stat st;
+    if (stat(client_pipe_name, &st) != 0) {
+        LOG_ERROR("Pipe клиента не существует: %s", client_pipe_name);
+        return;
+    }
+    
+    Player *player = &game.players[game.player_count];
+    player->id = player_id;
+    strncpy(player->name, player_name, MAX_NAME_LEN - 1);
+    player->name[MAX_NAME_LEN - 1] = '\0';
+    strncpy(player->pipe_name, client_pipe_name, PIPE_NAME_LENGTH - 1);
+    player->pipe_name[PIPE_NAME_LENGTH - 1] = '\0';
+    player->active = 1;
+    
+    game.player_count++;
+    
+    char welcome_msg[BUFFER_SIZE];
+    snprintf(welcome_msg, BUFFER_SIZE, 
+            "CONNECT|%d|Вы подключены! Ожидаем других игроков (%d/%d)", 
+            player_id, game.player_count, required_players);
+    send_text_to_player(game.player_count - 1, welcome_msg);
+    
+    if (game.player_count >= required_players) {
+        game.game_active = 1;
+        char game_start_msg[BUFFER_SIZE];
+        snprintf(game_start_msg, BUFFER_SIZE, 
+                "GAME_STATE|Все игроки подключены! Игра началась. Слово состоит из %d букв.",
+                (int)strlen(game.secret_word));
+        broadcast_message(game_start_msg);
+    }
+}
+\end{lstlisting}
+
+\subsection{Основной цикл сервера (server.c)}
+
+\begin{lstlisting}[language=C]
+void game_loop(void) {
+    fd_set read_fds;
+    struct timeval timeout;
+    char buffer[BUFFER_SIZE];
+    
+    while (running) {
+        FD_ZERO(&read_fds);
+        FD_SET(server_fd, &read_fds);
+        
+        timeout.tv_sec = 1;
+        timeout.tv_usec = 0;
+        
+        int activity = select(server_fd + 1, &read_fds, NULL, NULL, &timeout);
+        
+        if (activity < 0 && errno != EINTR) {
+            perror("select");
+            break;
+        }
+        
+        if (FD_ISSET(server_fd, &read_fds)) {
+            ssize_t bytes = read(server_fd, buffer, BUFFER_SIZE - 1);
+            
+            if (bytes > 0) {
+                buffer[bytes] = '\0';
+                char *line = buffer;
+                char *line_end;
+                while ((line_end = strchr(line, '\n')) != NULL) {
+                    *line_end = '\0';
+                    if (strlen(line) > 0) {
+                        parse_message(line);
+                    }
+                    line = line_end + 1;
+                }
+                if (strlen(line) > 0) {
+                    parse_message(line);
+                }
+            }
+        }
+    }
+}
+\end{lstlisting}
+
+\subsection{Основной цикл клиента (client.c)}
+
+\begin{lstlisting}[language=C]
+void client_loop(void) {
+    fd_set read_fds;
+    struct timeval timeout;
+    char buffer[BUFFER_SIZE];
+    
+    while (active) {
+        FD_ZERO(&read_fds);
+        
+        if (client_pipe_fd >= 0) {
+            FD_SET(client_pipe_fd, &read_fds);
+        }
+        FD_SET(STDIN_FILENO, &read_fds);
+        
+        int max_fd = STDIN_FILENO;
+        if (client_pipe_fd >= 0 && client_pipe_fd > max_fd) {
+            max_fd = client_pipe_fd;
+        }
+        
+        timeout.tv_sec = 1;
+        timeout.tv_usec = 0;
+        
+        int activity = select(max_fd + 1, &read_fds, NULL, NULL, &timeout);
+        
+        if (FD_ISSET(client_pipe_fd, &read_fds)) {
+            ssize_t bytes = read(client_pipe_fd, buffer, BUFFER_SIZE - 1);
+            if (bytes > 0) {
+                buffer[bytes] = '\0';
+                char *line = buffer;
+                char *line_end;
+                while ((line_end = strchr(line, '\n')) != NULL) {
+                    *line_end = '\0';
+                    if (strlen(line) > 0) {
+                        handle_server_message(line);
+                    }
+                    line = line_end + 1;
+                }
+            }
+        }
+        
+        if (FD_ISSET(STDIN_FILENO, &read_fds)) {
+            if (fgets(buffer, BUFFER_SIZE, stdin) != NULL) {
+                buffer[strcspn(buffer, "\n")] = '\0';
+                handle_user_input(buffer);
+            }
+        }
+    }
+}
+\end{lstlisting}
